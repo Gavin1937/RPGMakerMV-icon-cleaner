@@ -7,25 +7,80 @@
 
 # 原理解释
 
-RPG Maker MV 引擎是基于 nw.js 制作的。因此引擎会将很多的游戏数据储存在同一个 “chromium游览器” 的文件夹里面。
+RPG Maker MV 引擎是基于 [nw.js](https://docs.nwjs.io/en/latest/) 制作的。nw.js 会将用户数据储存在一个 "[chromium用户数据文件夹](https://chromium.googlesource.com/chromium/src/+/master/docs/user_data_dir.md)" 里面。
+
+大概长这样:
 
 ```
-%USERPROFILE%\AppData\Local\User Data\Default
+└─User Data
+    ├─BrowserMetrics
+    ├─Crashpad
+    ├─Default
+    │  ├─blob_storage
+    │  │  └─01234567-89ab-cdef-0123-456789abcdef
+    │  ├─data_reduction_proxy_leveldb
+    │  ├─Download Service
+    │  │  ├─EntryDB
+    │  │  └─Files
+    │  ├─Extension Rules
+    │  ├─Extension State
+    │  ├─GPUCache
+    │  ├─Sync Data
+    │  │  └─LevelDB
+    │  ├─Thumbnails
+    │  └─Web Applications
+    │      └─_crx_icogdcdnbgpilfoaafhjhpjmenlfjnnp
+    ├─ShaderCache
+    │  └─GPUCache
+    └─Stability
 ```
 
-如果游戏根目录的 `package.json` 和游戏文件夹 `www` 下的 `package.json` 没有设置一个独一无二的 `name`
+nw.js 要求每一个软件使用一个 `package.json` 文件来描述当前软件。
+
+根据[nw.js的文档](https://docs.nwjs.io/en/latest/References/Manifest%20Format/#name)，每一个 `package.json` 文件都必须要有两对键值:  `main` 和 `name` 。我们重点看 `name`:
+
+> **nw.js文档:**
+>
+> **name**
+>
+> * {String} the name of the package. This must be a unique, lowercase alpha-numeric name without spaces. It may include “.” or “_” or “-” characters. It is otherwise opaque.
+> 
+> **name should be globally unique since NW.js will store app’s data under the directory named name.**
+
+注意看最后一段话，`name` 必须是一个**全局独一无二的字符串**，因为nw.js会根据 `name` 的值来创建一个chromium用户数据文件夹用于储存软件的数据。
+
+RPG Maker MV 引擎在Windows下会将所有的游戏的chromium用户数据文件夹放在下面这个路径下:
+
+```
+%USERPROFILE%\AppData\Local
+```
+
+如果一个游戏的 `name` 值为 `testgame` 那么其chromium用户数据文件夹将会在这个路径下: 
+
+```
+%USERPROFILE%\AppData\Local\testgame\User Data
+```
+
+RPG Maker MV 游戏有两个重要的 `package.json` 文件，一个为游戏根目录下的 `package.json`，另一个为游戏文件夹 `www` 下的 `package.json`。前者指向后者。两个 `package.json` 的 `name` 值必须相同。
+
+如果两个 `package.json` 没有设置一个独一无二的 `name` 值
 
 ```jsonc
 // 例如
 {
     "name": "", // 不填写任何字符
-    // or
-    "name": "mygame", // 使用重复名字
-    // ...
 }
 ```
 
-那么游戏引擎会将游戏的窗口图标给缓存到上面提到的chromium引擎文件夹下，并且会让所有其他没有正确设置 `name` 的游戏都使用同其窗口图标。
+那么，nw.js将会把chromium用户数据文件夹设置在下面这个路径上:
+
+```
+%USERPROFILE%\AppData\Local\User Data
+```
+
+RPG Maker MV 会在游戏运行时将游戏的窗口图标给缓存到游戏的chromium用户数据文件夹里（在文件夹 `Web Applications` 里面）。
+
+当两个游戏的chromium用户数据文件夹位置相同，它们会使用同一个缓存的窗口图标。
 
 # 例子
 
@@ -70,6 +125,11 @@ RPG Maker MV 引擎是基于 nw.js 制作的。因此引擎会将很多的游戏
 ```
 
 * 我们可以看到游戏A的两个 `package.json` 文件都没有设置一个独一无二的 `name` 值，不过游戏A可以正确的显示图标。
+* 此时，游戏A的chromium用户数据文件夹在下面这个路径上:
+
+```
+%USERPROFILE%\AppData\Local\User Data
+```
 
 2. 我们接着打开游戏B
 
@@ -111,7 +171,7 @@ RPG Maker MV 引擎是基于 nw.js 制作的。因此引擎会将很多的游戏
 }
 ```
 
-此时，游戏B的图标为游戏A的图标。引擎使用了之前缓存在chromium引擎文件夹下的游戏A的图标，游戏B窗口图标错误。
+此时，游戏B的图标为游戏A的图标。引擎使用了之前缓存在游戏A的chromium用户数据文件夹下的游戏A的图标，游戏B窗口图标错误。
 
 # 解决方法
 
@@ -157,11 +217,13 @@ RPG Maker MV 引擎是基于 nw.js 制作的。因此引擎会将很多的游戏
 
 * 我们可以看到现在游戏B的窗口图标变为正确的图标了。
 
-## 方法2：清理chromium引擎缓存的图标：
+## 方法2：清理chromium用户数据文件夹缓存的图标：
 
-如果你不想更改游戏文件，你也可以清理chromium引擎缓存的图标。
+如果你不想更改游戏文件，你也可以清理chromium用户数据文件夹缓存的图标。
 
-在引擎文件夹下
+一般来说，大多数出现此问题的游戏都是没有设置 `name` 值的游戏。
+
+它们的chromium用户数据文件夹在这个路径:
 
 ```
 %USERPROFILE%\AppData\Local\User Data\Default
